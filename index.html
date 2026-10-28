@@ -300,7 +300,7 @@
       result.innerHTML = '<div class="empty">Import file XLSX daftar harga terlebih dahulu.</div>'; return;
     }
     if (!text.trim()){
-      result.innerHTML = '<div class="empty">Scan barcode atau ketik nama / PLU barang.</div>'; return;
+      result.innerHTML = '<div class="empty">Ketik nama barang atau Scan barcode.</div>'; return;
     }
     const {list, exact, total} = search(text);
     if (!list.length){
