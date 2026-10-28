@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cek Harga Bazar</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --bg:#f3f5f9; --card:#fff; --ink:#1b2333; --muted:#6b7488; --line:#e3e7ef;
@@ -24,9 +25,8 @@
   #camBtn{font-size:22px;width:56px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
   .status{color:var(--muted);font-size:13px;margin:10px 2px}
   #camWrap{display:none;margin:12px 0;position:relative;border-radius:12px;overflow:hidden;background:#000}
-  #camWrap video{width:100%;max-height:280px;object-fit:cover;display:block}
-  #camWrap .line{position:absolute;left:10%;right:10%;top:50%;height:2px;background:rgba(255,60,60,.85)}
-  #camClose{position:absolute;right:8px;top:8px}
+  #reader{width:100%;min-height:200px}
+  #camClose{position:absolute;right:8px;top:8px;z-index:3}
   .empty{text-align:center;color:var(--muted);padding:50px 10px;border:2px dashed var(--line);border-radius:14px;background:#fff}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
   .card.top{border:2px solid var(--brand);padding:18px}
@@ -77,8 +77,7 @@
     <button id="camBtn" title="Scan dengan kamera">📷</button>
   </div>
   <div id="camWrap">
-    <video id="video" playsinline muted></video>
-    <div class="line"></div>
+    <div id="reader"></div>
     <button class="btn" id="camClose">Tutup</button>
   </div>
   <div class="status" id="status">Belum ada data. Klik “Import XLSX”.</div>
@@ -360,38 +359,54 @@
   document.addEventListener('keydown', e => { if (e.key==='Escape') $('listPanel').classList.remove('open'); });
 
   // ---------- scan kamera ----------
-  let stream, scanning = false, detector;
-  $('camBtn').onclick = async () => {
-    if (!('BarcodeDetector' in window)){
-      alert('Browser ini belum mendukung scan kamera. Gunakan scanner barcode (USB/Bluetooth) atau Chrome Android terbaru.'); return;
-    }
-    try{
-      detector = detector || new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
-      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-      const v = $('video'); v.srcObject = stream; await v.play();
-      $('camWrap').style.display = 'block'; scanning = true; loop();
-    }catch(err){ alert('Kamera tidak bisa dibuka: ' + err.message); }
-  };
-  function stopCam(){
-    scanning = false;
-    if (stream) stream.getTracks().forEach(t=>t.stop());
+  // memakai library html5-qrcode (jalan di Chrome, Safari iPhone, Firefox, dll)
+  let h5 = null, camBusy = false;
+  async function stopCam(){
+    try{ if (h5 && h5.isScanning) await h5.stop(); }catch(_){}
     $('camWrap').style.display = 'none';
+    camBusy = false;
   }
-  $('camClose').onclick = stopCam;
-  async function loop(){
-    if (!scanning) return;
+  function onScan(text){
+    if (!camBusy) return;
+    camBusy = false;
+    q.value = text;
+    render(text);
+    const {list} = search(text);
+    beep(list.length > 0);
+    stopCam();
+  }
+  $('camBtn').onclick = async () => {
+    if (camBusy) return;
+    if (typeof Html5Qrcode === 'undefined'){
+      alert('Library scanner gagal dimuat. Cek koneksi internet lalu muat ulang halaman.'); return;
+    }
+    if (!window.isSecureContext || !navigator.mediaDevices){
+      alert('Kamera hanya bisa dipakai lewat alamat HTTPS (contoh: https://...github.io/bazar/), bukan http:// atau alamat IP.'); return;
+    }
+    camBusy = true;
+    $('camWrap').style.display = 'block';
     try{
-      const codes = await detector.detect($('video'));
-      if (codes.length){
-        q.value = codes[0].rawValue;
-        render(q.value);
-        const {list} = search(q.value);
-        beep(list.length>0);
-        stopCam(); return;
-      }
-    }catch(_){}
-    setTimeout(loop, 200);
-  }
+      const F = Html5QrcodeSupportedFormats;
+      h5 = h5 || new Html5Qrcode('reader', {
+        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE],
+        useBarCodeDetectorIfSupported: true,
+        verbose: false
+      });
+      await h5.start(
+        {facingMode:'environment'},
+        {fps:10, qrbox:(w,h)=>({width:Math.floor(w*0.85), height:Math.floor(Math.min(h,w)*0.45)})},
+        onScan,
+        () => {}
+      );
+    }catch(err){
+      await stopCam();
+      const m = String(err && (err.message || err));
+      if (/permission|denied|NotAllowed/i.test(m)) alert('Izin kamera ditolak. Aktifkan izin kamera untuk situs ini di pengaturan browser, lalu coba lagi.');
+      else if (/NotFound|no camera|Requested device/i.test(m)) alert('Kamera tidak ditemukan di perangkat ini.');
+      else alert('Kamera tidak bisa dibuka: ' + m);
+    }
+  };
+  $('camClose').onclick = stopCam;
 
   // klik di mana saja → fokus kembali ke kolom scan (kecuali tombol)
   document.addEventListener('click', e => { if (!e.target.closest('button,input,video')) q.focus(); });
