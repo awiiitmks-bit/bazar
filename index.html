@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cek Harga Barang</title>
+<title>Harga Bazar</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -43,15 +43,29 @@
   .strike{text-decoration:line-through;color:var(--muted);font-size:14px}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1b2333;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s}
   .toast.show{opacity:1}
-  .hpp{display:none}
-  body.showhpp .hpp{display:inline-block}
+  #listPanel{position:fixed;inset:0;background:var(--bg);z-index:20;display:none;flex-direction:column}
+  #listPanel.open{display:flex}
+  .lp-head{background:var(--brand);color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center}
+  .lp-head h2{margin:0;font-size:17px;flex:1}
+  .lp-tools{padding:12px 16px 0;max-width:900px;width:100%;margin:0 auto}
+  #lq{width:100%;font-size:16px;padding:11px 14px;border:2px solid var(--line);border-radius:10px;outline:none}
+  #lq:focus{border-color:var(--brand)}
+  .lp-body{flex:1;overflow:auto;padding:10px 16px 20px;max-width:900px;width:100%;margin:0 auto}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:14px}
+  th{background:#e9eef8;text-align:left;padding:9px 10px;position:sticky;top:0;font-size:12.5px}
+  td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:top}
+  td.num,th.num{text-align:right;white-space:nowrap}
+  td .sub{color:var(--muted);font-size:12px}
+  tr.clickable{cursor:pointer}
+  tr.clickable:hover{background:#f5f8ff}
+  .more{display:block;margin:12px auto}
 </style>
 </head>
 <body>
 
 <header>
   <h1>🏷️ Cek Harga Barang</h1>
-  <button class="btn ghost" id="hppBtn" title="Tampilkan/sembunyikan HPP">HPP</button>
+  <button class="btn ghost" id="listBtn">📋 Daftar Harga</button>
   <button class="btn" id="importBtn">📂 Import XLSX</button>
   <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
 </header>
@@ -69,6 +83,18 @@
   <div class="status" id="status">Belum ada data. Klik “Import XLSX”.</div>
   <div id="result"></div>
 </main>
+
+<div id="listPanel">
+  <div class="lp-head">
+    <h2>📋 Daftar Harga</h2>
+    <button class="btn" id="listClose">✕ Tutup</button>
+  </div>
+  <div class="lp-tools">
+    <input id="lq" type="search" placeholder="Filter nama / PLU…" autocomplete="off">
+    <div class="status" id="lcount"></div>
+  </div>
+  <div class="lp-body" id="lbody"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -206,14 +232,13 @@
     const normal = r.disc > 0 && r.disc < 100 ? r.price / (1 - r.disc/100) : 0;
     return `<div class="card ${top?'top':''}">
       <div class="name">${esc(r.descp)}</div>
-      <div class="meta"><span>PLU: <b>${esc(r.plu)}</b></span>${r.faktur?`<span>Faktur: ${esc(r.faktur)}</span>`:''}${r.tag?`<span>Tag: ${esc(r.tag)}</span>`:''}</div>
+      <div class="meta"><span>PLU: <b>${esc(r.plu)}</b></span></div>
       <div class="price">${rp(r.price)}</div>
       <div class="row">
         ${r.disc?`<span class="tag ok">Disc ${r.disc}%</span>`:''}
         ${normal?`<span class="strike">${rp(normal)}</span>`:''}
         <span class="tag">Qty: ${r.qty.toLocaleString('id-ID')}</span>
         ${ket?`<span class="tag ${kcls}">${esc(ket)}</span>`:''}
-        <span class="tag hpp">HPP ${rp(r.hpp)}</span>
       </div>
     </div>`;
   }
@@ -247,7 +272,39 @@
     q.select();
   });
 
-  $('hppBtn').onclick = () => document.body.classList.toggle('showhpp');
+  // ---------- daftar harga ----------
+  const PAGE = 100;
+  let lshown = PAGE, lfiltered = [];
+  function listData(){
+    const toks = $('lq').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    lfiltered = toks.length ? DATA.filter(r => toks.every(k => r._s.includes(k))) : DATA.slice();
+  }
+  function renderList(){
+    const body = $('lbody');
+    if (!DATA.length){ body.innerHTML = '<div class="empty">Import file XLSX terlebih dahulu.</div>'; $('lcount').textContent=''; return; }
+    const rows = lfiltered.slice(0, lshown);
+    $('lcount').textContent = `${lfiltered.length.toLocaleString('id-ID')} barang` + (lfiltered.length>rows.length ? ` (tampil ${rows.length})` : '');
+    if (!rows.length){ body.innerHTML = '<div class="empty">Tidak ada barang yang cocok.</div>'; return; }
+    body.innerHTML = '<table><thead><tr><th>Barang</th><th class="num">Qty</th><th class="num">Harga</th></tr></thead><tbody>' +
+      rows.map((r,i)=>`<tr class="clickable" data-i="${i}"><td>${esc(r.descp)}<div class="sub">${esc(r.plu)}${r.ket?' · '+esc(r.ket):''}</div></td><td class="num">${r.qty.toLocaleString('id-ID')}</td><td class="num"><b>${rp(r.price)}</b>${r.disc?`<div class="sub">Disc ${r.disc}%</div>`:''}</td></tr>`).join('') +
+      '</tbody></table>' +
+      (lfiltered.length>rows.length ? '<button class="btn more" style="background:var(--brand);color:#fff" id="lmore">Muat lebih banyak</button>' : '');
+    const m = $('lmore'); if (m) m.onclick = () => { lshown += PAGE; renderList(); };
+  }
+  $('listBtn').onclick = () => {
+    $('listPanel').classList.add('open');
+    $('lq').value = ''; lshown = PAGE; listData(); renderList();
+  };
+  $('listClose').onclick = () => { $('listPanel').classList.remove('open'); q.focus(); };
+  let ltimer;
+  $('lq').addEventListener('input', () => { clearTimeout(ltimer); ltimer = setTimeout(()=>{ lshown = PAGE; listData(); renderList(); }, 150); });
+  $('lbody').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-i]'); if (!tr) return;
+    const r = lfiltered[+tr.dataset.i];
+    $('listPanel').classList.remove('open');
+    q.value = r.plu || r.descp; render(q.value); window.scrollTo(0,0);
+  });
+  document.addEventListener('keydown', e => { if (e.key==='Escape') $('listPanel').classList.remove('open'); });
 
   // ---------- scan kamera ----------
   let stream, scanning = false, detector;
