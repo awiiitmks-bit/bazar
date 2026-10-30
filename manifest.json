@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "Cek Harga Bazar",
+  "short_name": "Cek Harga",
+  "description": "Cek harga barang bazar dengan scan barcode atau ketik nama barang.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "id",
+  "background_color": "#f3f5f9",
+  "theme_color": "#2f5fb8",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

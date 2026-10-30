@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cek Harga Bazar</title>
+<meta name="theme-color" content="#2f5fb8">
+<meta name="description" content="Cek harga barang bazar dengan scan barcode atau ketik nama barang.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cek Harga">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#f3f5f9; --card:#fff; --ink:#1b2333; --muted:#6b7488; --line:#e3e7ef;
+    --brand:#2f5fb8; --ok:#1c9a5b; --warn:#d9822b; --bad:#d64545;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--brand);color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  header h1{font-size:18px;margin:0;flex:1;min-width:140px}
+  .btn{background:#fff;color:var(--brand);border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:14px}
+  .btn.ghost{background:rgba(255,255,255,.18);color:#fff}
+  .btn:active{transform:scale(.97)}
+  main{max-width:900px;margin:0 auto;padding:16px}
+  .searchbox{display:flex;gap:8px}
+  #q{flex:1;font-size:20px;padding:14px 16px;border:2px solid var(--line);border-radius:12px;outline:none;background:#fff}
+  #q:focus{border-color:var(--brand)}
+  #camBtn{font-size:22px;width:56px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+  .status{color:var(--muted);font-size:13px;margin:10px 2px}
+  #camWrap{display:none;margin:12px 0;position:relative;border-radius:12px;overflow:hidden;background:#000}
+  #reader{width:100%;min-height:200px}
+  #camClose{position:absolute;right:8px;top:8px;z-index:3}
+  .empty{text-align:center;color:var(--muted);padding:50px 10px;border:2px dashed var(--line);border-radius:14px;background:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+  .card.top{border:2px solid var(--brand);padding:18px}
+  .name{font-weight:700;font-size:16px;line-height:1.3}
+  .card.top .name{font-size:20px}
+  .meta{color:var(--muted);font-size:12.5px;margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+  .price{font-size:30px;font-weight:800;color:var(--brand);margin-top:8px}
+  .card.top .price{font-size:44px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center}
+  .tag{font-size:12px;padding:3px 9px;border-radius:20px;background:#eef1f7;color:#445}
+  .tag.warn{background:#fff1e0;color:var(--warn)}
+  .tag.bad{background:#fde8e8;color:var(--bad)}
+  .tag.ok{background:#e4f6ec;color:var(--ok)}
+  .strike{text-decoration:line-through;color:var(--muted);font-size:14px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1b2333;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s}
+  .toast.show{opacity:1}
+  #listPanel{position:fixed;inset:0;background:var(--bg);z-index:20;display:none;flex-direction:column}
+  #listPanel.open{display:flex}
+  .lp-head{background:var(--brand);color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center}
+  .lp-head h2{margin:0;font-size:17px;flex:1}
+  .lp-tools{padding:12px 16px 0;max-width:900px;width:100%;margin:0 auto}
+  #lq{width:100%;font-size:16px;padding:11px 14px;border:2px solid var(--line);border-radius:10px;outline:none}
+  #lq:focus{border-color:var(--brand)}
+  .lp-body{flex:1;overflow:auto;padding:10px 16px 20px;max-width:900px;width:100%;margin:0 auto}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:14px}
+  th{background:#e9eef8;text-align:left;padding:9px 10px;position:sticky;top:0;font-size:12.5px}
+  td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:top}
+  td.num,th.num{text-align:right;white-space:nowrap}
+  td .sub{color:var(--muted);font-size:12px}
+  tr.clickable{cursor:pointer}
+  tr.clickable:hover{background:#f5f8ff}
+  .more{display:block;margin:12px auto}
+  #iosHint{display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:30;background:#fff;border:2px solid var(--brand);border-radius:14px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:14px;line-height:1.5}
+  #iosHint.show{display:block}
+  #iosHint button{margin-top:8px;background:var(--brand);color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏷️ Cek Harga Bazar</h1>
+  <button class="btn ghost" id="listBtn">📋 Daftar Harga</button>
+  <button class="btn" id="installBtn" style="display:none">📲 Pasang Aplikasi</button>
+  <button class="btn" id="importBtn" style="display:none">📂 Import XLSX</button>
+  <button class="btn" id="dlBtn" style="display:none">⬇️ Unduh data.json</button>
+  <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+</header>
+
+<main>
+  <div class="searchbox">
+    <input id="q" type="search" placeholder="Ketik nama barang / Scan barcode" autocomplete="off" autofocus>
+    <button id="camBtn" title="Scan dengan kamera">📷</button>
+  </div>
+  <div id="camWrap">
+    <div id="reader"></div>
+    <button class="btn" id="camClose">Tutup</button>
+  </div>
+  <div class="status" id="status">Belum ada data. Klik “Import XLSX”.</div>
+  <div id="result"></div>
+</main>
+
+<div id="listPanel">
+  <div class="lp-head">
+    <h2>📋 Daftar Harga</h2>
+    <button class="btn" id="listClose">✕ Tutup</button>
+  </div>
+  <div class="lp-tools">
+    <input id="lq" type="search" placeholder="Ketik nama barang..." autocomplete="off">
+    <div class="status" id="lcount"></div>
+  </div>
+  <div class="lp-body" id="lbody"></div>
+</div>
+
+<div id="iosHint">
+  <b>Pasang di iPhone / iPad</b><br>
+  Ketuk tombol <b>Bagikan</b> (kotak dengan panah ke atas) di Safari, lalu pilih <b>Tambah ke Layar Utama</b>.
+  <br><button class="btn" id="iosHintClose">Mengerti</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const q = $('q'), result = $('result'), statusEl = $('status');
+  let DATA = [];
+
+  // ---------- util ----------
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const rp = n => 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID');
+  const norm = s => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const toNum = v => {
+    if (typeof v === 'number') return v;
+    const n = parseFloat(String(v ?? '').replace(/[^\d.,-]/g,'').replace(/\./g,'').replace(',','.'));
+    return isNaN(n) ? 0 : n;
+  };
+  function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+  let actx;
+  function beep(ok){
+    try{
+      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = ok ? 1000 : 300; g.gain.value = .08;
+      o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + (ok?.08:.25));
+    }catch(e){}
+  }
+
+  // ---------- mapping kolom ----------
+  const ALIAS = {
+    faktur:['FAKTUR','NOFAKTUR','NOMOR'],
+    plu:['PLU','BARCODE','KODE','KODEBARANG','SKU','PLUBARANG'],
+    descp:['DESCP','DESKRIPSI','NAMA','NAMABARANG','DESC','DESCRIPTION','BARANG'],
+    tag:['TAG'],
+    qty:['QTY','STOK','STOCK','JUMLAH'],
+    hpp:['HPP','MODAL'],
+    disc:['DISC','DISKON'],
+    price:['PRICEBAZAAR','HARGABAZAAR','HARGA','PRICE','HARGAJUAL'],
+    subtotal:['SUBTOTAL'],
+    ket:['KETKONDISI','KET','KONDISI','KETERANGAN']
+  };
+
+  function parseSheet(rows){
+    // cari baris header (dalam 15 baris pertama)
+    let hi = -1, map = {};
+    for (let i=0; i<Math.min(rows.length,15); i++){
+      const m = {};
+      (rows[i]||[]).forEach((c,idx)=>{
+        const n = norm(c);
+        for (const k in ALIAS) if (!(k in m) && ALIAS[k].includes(n)) m[k]=idx;
+      });
+      if ('plu' in m || 'descp' in m){ hi=i; map=m; break; }
+    }
+    if (hi < 0) throw new Error('Header kolom (PLU / DESCP / PRICE_BAZAAR) tidak ditemukan.');
+    if (!('price' in map)) throw new Error('Kolom harga (PRICE_BAZAAR / HARGA) tidak ditemukan.');
+    const out = [];
+    for (let i=hi+1; i<rows.length; i++){
+      const r = rows[i]; if (!r || r.every(c=>c===''||c==null)) continue;
+      const g = k => (k in map) ? r[map[k]] : '';
+      const o = {
+        plu: String(g('plu')??'').trim(),
+        descp: String(g('descp')??'').trim(),
+        qty: toNum(g('qty')),
+        disc: toNum(g('disc')),
+        price: toNum(g('price')),
+        ket: String(g('ket')??'').trim()
+      };
+      if (!o.plu && !o.descp) continue;
+      o._s = (o.plu + ' ' + o.descp).toLowerCase();
+      out.push(o);
+    }
+    return out;
+  }
+
+  // gabungkan baris identik (beda faktur) -> qty dijumlah
+  function mergeRows(rows){
+    const m = new Map();
+    rows.forEach(r => {
+      const k = [r.plu, r.descp, r.price, r.disc, r.ket].join('|');
+      const e = m.get(k);
+      if (e) e.qty += r.qty; else m.set(k, {...r});
+    });
+    return Array.from(m.values());
+  }
+  const prep = r => {
+    const o = {
+      plu: String(r.plu ?? '').trim(),
+      descp: String(r.descp ?? '').trim(),
+      qty: Number(r.qty) || 0,
+      disc: Number(r.disc) || 0,
+      price: Number(r.price) || 0,
+      ket: String(r.ket ?? '').trim()
+    };
+    o._s = (o.plu + ' ' + o.descp).toLowerCase();
+    return o;
+  };
+
+  // ---------- import (admin) ----------
+  $('importBtn').onclick = () => $('file').click();
+  $('dlBtn').onclick = () => {
+    const payload = {
+      updated: new Date().toISOString(),
+      items: DATA.map(r => ({plu:r.plu, descp:r.descp, qty:r.qty, disc:r.disc, price:r.price, ket:r.ket}))
+    };
+    const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'data.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+    toast('data.json diunduh. Upload ke GitHub.');
+  };
+  $('file').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try{
+      if (typeof XLSX === 'undefined') throw new Error('Library XLSX gagal dimuat (cek koneksi internet).');
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      let all = [];
+      wb.SheetNames.forEach(n=>{
+        try{
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, defval:''});
+          all = all.concat(parseSheet(rows));
+        }catch(err){ if (wb.SheetNames.length===1) throw err; }
+      });
+      if (!all.length) throw new Error('Tidak ada data barang yang terbaca.');
+      DATA = mergeRows(all);
+      try{ localStorage.setItem('cekharga_data', JSON.stringify(DATA.map(({_s,...r})=>r))); localStorage.setItem('cekharga_file', f.name); }catch(_){ }
+      statusEl.textContent = `📄 ${f.name} — ${DATA.length.toLocaleString('id-ID')} barang. Klik “Unduh data.json” lalu upload ke GitHub agar semua perangkat ikut terbarui.`;
+      $('dlBtn').style.display = '';
+      toast(DATA.length.toLocaleString('id-ID') + ' barang diimport');
+      q.value=''; render(''); q.focus();
+    }catch(err){
+      alert('Gagal import: ' + err.message);
+    }
+    e.target.value='';
+  };
+
+  // ---------- muat data: data.json dari server, cadangan dari browser ----------
+  const ADMIN = /[?&#]admin/.test(location.search + location.hash);
+  async function loadData(){
+    statusEl.textContent = 'Memuat data harga…';
+    let fromServer = false, updated = '';
+    try{
+      const res = await fetch('data.json?v=' + Date.now(), {cache:'no-store'});
+      if (res.ok){
+        const j = await res.json();
+        const items = Array.isArray(j) ? j : j.items;
+        if (items && items.length){
+          DATA = items.map(prep); fromServer = true; updated = j.updated || '';
+        }
+      }
+    }catch(_){}
+    if (!fromServer){
+      try{
+        const d = JSON.parse(localStorage.getItem('cekharga_data') || 'null');
+        if (d && d.length) DATA = d.map(prep);
+      }catch(_){}
+    }
+    if (ADMIN || !fromServer) $('importBtn').style.display = '';
+    if (DATA.length){
+      const tgl = updated ? new Date(updated).toLocaleString('id-ID', {dateStyle:'medium', timeStyle:'short'}) : '';
+      statusEl.textContent = fromServer
+        ? `✅ Data harga${tgl ? ' diperbarui ' + tgl : ''} — ${DATA.length.toLocaleString('id-ID')} barang. Siap scan / ketik.`
+        : `📄 Data dari browser ini — ${DATA.length.toLocaleString('id-ID')} barang. Siap scan / ketik.`;
+    } else {
+      statusEl.textContent = 'Belum ada data harga.';
+    }
+    render(q.value);
+  }
+
+  // ---------- pencarian ----------
+  function search(text){
+    const t = text.trim().toLowerCase();
+    if (!t) return {list:[], exact:false};
+    const exactList = DATA.filter(r => r.plu.toLowerCase() === t);
+    if (exactList.length) return {list:exactList, exact:true};
+    const toks = t.split(/\s+/);
+    const list = DATA.filter(r => toks.every(k => r._s.includes(k)));
+    return {list:list.slice(0,60), exact:false, total:list.length};
+  }
+
+  function card(r, top){
+    const ket = r.ket;
+    const kl = ket.toLowerCase();
+    const kcls = kl.includes('expired') ? 'warn' : (kl.includes('rusak') ? 'bad' : 'ok');
+    const normal = r.disc > 0 && r.disc < 100 ? r.price / (1 - r.disc/100) : 0;
+    return `<div class="card ${top?'top':''}">
+      <div class="name">${esc(r.descp)}</div>
+      <div class="meta"><span>PLU: <b>${esc(r.plu)}</b></span></div>
+      <div class="price">${rp(r.price)}</div>
+      <div class="row">
+        ${r.disc?`<span class="tag ok">Disc ${r.disc}%</span>`:''}
+        ${normal?`<span class="strike">${rp(normal)}</span>`:''}
+        <span class="tag">Qty: ${r.qty.toLocaleString('id-ID')}</span>
+        ${ket?`<span class="tag ${kcls}">${esc(ket)}</span>`:''}
+      </div>
+    </div>`;
+  }
+
+  function render(text){
+    if (!DATA.length){
+      result.innerHTML = '<div class="empty">Import file XLSX daftar harga terlebih dahulu.</div>'; return;
+    }
+    if (!text.trim()){
+      result.innerHTML = '<div class="empty">Ketik nama barang atau Scan barcode.</div>'; return;
+    }
+    const {list, exact, total} = search(text);
+    if (!list.length){
+      result.innerHTML = '<div class="empty">❌ Barang tidak ditemukan.</div>'; return;
+    }
+    let html = list.map((r,i)=>card(r, exact && i===0 || list.length===1)).join('');
+    if (!exact && total > list.length) html += `<div class="status">Menampilkan ${list.length} dari ${total} hasil. Perjelas kata kunci.</div>`;
+    result.innerHTML = html;
+  }
+
+  let timer;
+  q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(()=>render(q.value), 120); });
+  q.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    clearTimeout(timer);
+    render(q.value);
+    const {list} = search(q.value);
+    beep(list.length > 0);
+    // pilih teks agar scan berikutnya menimpa otomatis
+    q.select();
+  });
+
+  // ---------- daftar harga ----------
+  const PAGE = 100;
+  let lshown = PAGE, lfiltered = [];
+  function listData(){
+    const toks = $('lq').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    lfiltered = toks.length ? DATA.filter(r => toks.every(k => r._s.includes(k))) : DATA.slice();
+  }
+  function renderList(){
+    const body = $('lbody');
+    if (!DATA.length){ body.innerHTML = '<div class="empty">Import file XLSX terlebih dahulu.</div>'; $('lcount').textContent=''; return; }
+    const rows = lfiltered.slice(0, lshown);
+    $('lcount').textContent = `${lfiltered.length.toLocaleString('id-ID')} barang` + (lfiltered.length>rows.length ? ` (tampil ${rows.length})` : '');
+    if (!rows.length){ body.innerHTML = '<div class="empty">Tidak ada barang yang cocok.</div>'; return; }
+    body.innerHTML = '<table><thead><tr><th>Barang</th><th class="num">Qty</th><th class="num">Harga</th></tr></thead><tbody>' +
+      rows.map((r,i)=>`<tr class="clickable" data-i="${i}"><td>${esc(r.descp)}<div class="sub">${esc(r.plu)}${r.ket?' · '+esc(r.ket):''}</div></td><td class="num">${r.qty.toLocaleString('id-ID')}</td><td class="num"><b>${rp(r.price)}</b>${r.disc?`<div class="sub">Disc ${r.disc}%</div>`:''}</td></tr>`).join('') +
+      '</tbody></table>' +
+      (lfiltered.length>rows.length ? '<button class="btn more" style="background:var(--brand);color:#fff" id="lmore">Muat lebih banyak</button>' : '');
+    const m = $('lmore'); if (m) m.onclick = () => { lshown += PAGE; renderList(); };
+  }
+  $('listBtn').onclick = () => {
+    $('listPanel').classList.add('open');
+    $('lq').value = ''; lshown = PAGE; listData(); renderList();
+  };
+  $('listClose').onclick = () => { $('listPanel').classList.remove('open'); q.focus(); };
+  let ltimer;
+  $('lq').addEventListener('input', () => { clearTimeout(ltimer); ltimer = setTimeout(()=>{ lshown = PAGE; listData(); renderList(); }, 150); });
+  $('lbody').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-i]'); if (!tr) return;
+    const r = lfiltered[+tr.dataset.i];
+    $('listPanel').classList.remove('open');
+    q.value = r.plu || r.descp; render(q.value); window.scrollTo(0,0);
+  });
+  document.addEventListener('keydown', e => { if (e.key==='Escape') $('listPanel').classList.remove('open'); });
+
+  // ---------- scan kamera ----------
+  // memakai library html5-qrcode (jalan di Chrome, Safari iPhone, Firefox, dll)
+  let h5 = null, camBusy = false;
+  async function stopCam(){
+    try{ if (h5 && h5.isScanning) await h5.stop(); }catch(_){}
+    $('camWrap').style.display = 'none';
+    camBusy = false;
+  }
+  function onScan(text){
+    if (!camBusy) return;
+    camBusy = false;
+    q.value = text;
+    render(text);
+    const {list} = search(text);
+    beep(list.length > 0);
+    stopCam();
+  }
+  $('camBtn').onclick = async () => {
+    if (camBusy) return;
+    if (typeof Html5Qrcode === 'undefined'){
+      alert('Library scanner gagal dimuat. Cek koneksi internet lalu muat ulang halaman.'); return;
+    }
+    if (!window.isSecureContext || !navigator.mediaDevices){
+      alert('Kamera hanya bisa dipakai lewat alamat HTTPS (contoh: https://...github.io/bazar/), bukan http:// atau alamat IP.'); return;
+    }
+    camBusy = true;
+    $('camWrap').style.display = 'block';
+    try{
+      const F = Html5QrcodeSupportedFormats;
+      h5 = h5 || new Html5Qrcode('reader', {
+        formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE],
+        useBarCodeDetectorIfSupported: true,
+        verbose: false
+      });
+      await h5.start(
+        {facingMode:'environment'},
+        {fps:10, qrbox:(w,h)=>({width:Math.floor(w*0.85), height:Math.floor(Math.min(h,w)*0.45)})},
+        onScan,
+        () => {}
+      );
+    }catch(err){
+      await stopCam();
+      const m = String(err && (err.message || err));
+      if (/permission|denied|NotAllowed/i.test(m)) alert('Izin kamera ditolak. Aktifkan izin kamera untuk situs ini di pengaturan browser, lalu coba lagi.');
+      else if (/NotFound|no camera|Requested device/i.test(m)) alert('Kamera tidak ditemukan di perangkat ini.');
+      else alert('Kamera tidak bisa dibuka: ' + m);
+    }
+  };
+  $('camClose').onclick = stopCam;
+
+  // klik di mana saja → fokus kembali ke kolom scan (kecuali tombol)
+  document.addEventListener('click', e => { if (!e.target.closest('button,input,video')) q.focus(); });
+
+  // ---------- PWA: service worker + tombol pasang aplikasi ----------
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let deferredPrompt = null;
+
+  if ('serviceWorker' in navigator && window.isSecureContext){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone()) $('installBtn').style.display = '';
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    $('installBtn').style.display = 'none';
+    toast('Aplikasi berhasil dipasang');
+  });
+  // iOS Safari tidak punya prompt otomatis -> tampilkan petunjuk manual
+  if (isIOS && !isStandalone()) $('installBtn').style.display = '';
+
+  $('installBtn').onclick = async () => {
+    if (deferredPrompt){
+      deferredPrompt.prompt();
+      try{ await deferredPrompt.userChoice; }catch(_){}
+      deferredPrompt = null;
+      $('installBtn').style.display = 'none';
+    } else if (isIOS){
+      $('iosHint').classList.add('show');
+    } else {
+      alert('Buka menu browser (⋮), lalu pilih “Instal aplikasi” atau “Tambahkan ke layar utama”.');
+    }
+  };
+  $('iosHintClose').onclick = () => $('iosHint').classList.remove('show');
+
+  render('');
+  loadData();
+})();
+</script>
+</body>
+</html>
